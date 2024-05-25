@@ -62,7 +62,7 @@ architecture RTL of DE10_LITE_Default is
 
 component Reset_Delay is
 	port (
-		iCLK		: in std_logic;
+		iCLK	: in std_logic;
 		oRESET	: out std_logic
 	);
 end component;
@@ -82,6 +82,7 @@ component UpDownCounter is
 		EN		: in std_logic;
 		UD		: in std_logic;
 		SET	: in std_logic;
+		Key1  : in std_logic;
 		Cin	: in std_logic_vector(3 downto 0);
 		Cout	: out std_logic_vector(3 downto 0);
 		CB		: out std_logic
@@ -106,6 +107,7 @@ signal Cin4, Cin5 : std_logic_vector(3 downto 0);
 signal Cout1, Cout2, Cout3, Cout4, Cout5 : std_logic_vector(3 downto 0);
 signal SD1, SD2, SD3, SD4, SD5 : std_logic_vector(7 downto 0);
 signal DLY_RST : std_logic;
+signal Key1 : std_logic;
 
 begin
 
@@ -129,18 +131,38 @@ CG100: ClkGen generic map (250000) port map (MAX10_CLK1_50, reset, clk100);
 	Cin4 <= SW(3 downto 0);  -- Counter In Lower
 	Cin5 <= SW(7 downto 4);  -- Counter In Upper
 	LEDR(9) <= CB;  -- LED Display Carry/Borrow
+	Key1 <= Key(1); -- Start/Stop
 
 -- Enable of Carry/Borrow
-	
+EN1 <= CB;
+EN2 <= CB and CB1;
+EN3 <= CB and CB1 and CB2;
+EN4 <= CB and CB1 and CB2 and CB3;
+EN5 <= CB and CB1 and CB2 and CB3 and CB4;
+
 -- Up/Down Counter	
-UDC0: UpDownCounter port map (clk, reset, EN, UD, SET, Cin4, Cout, CB);
+UDC0: UpDownCounter port map (clk, reset, EN, UD, SET, Key1, Cin, Cout, CB);
+UDC1: UpDownCounter port map (clk, reset, EN1, UD, SET, Key1, Cin, Cout1, CB1);
+UDC2: UpDownCounter port map (clk, reset, EN2, UD, SET, Key1, Cin, Cout2, CB2);
+UDC3: UpDownCounter port map (clk, reset, EN3, UD, SET, Key1, Cin, Cout3, CB3);
+UDC4: UpDownCounter port map (clk, reset, EN4, UD, SET, Key1, Cin, Cout4, CB4);
+UDC5: UpDownCounter port map (clk, reset, EN5, UD, SET, Key1, Cin, Cout5, CB5);
 
 -- Hex Segment Decoder
 HSD0: SegmentDecoder port map (Cout, SD);
+HSD1: SegmentDecoder port map (Cout1, SD1);
+HSD2: SegmentDecoder port map (Cout2, SD2);
+HSD3: SegmentDecoder port map (Cout3, SD3);
+HSD4: SegmentDecoder port map (Cout4, SD4);
+HSD5: SegmentDecoder port map (Cout5, SD5);
 
 -- Display Segment
 	HEX0 <= SD;
-
+	HEX1 <= SD1;
+	HEX2 <= SD2;
+	HEX3 <= SD3;
+	HEX4 <= SD4;
+	HEX5 <= SD5;
 end RTL;
 
 -- Component
@@ -189,7 +211,7 @@ use IEEE.std_logic_unsigned.all;
 entity UpDownCounter is
    port (
       CLK, RESET : in std_logic;
-      EN, UD, SET	: in std_logic;
+      EN, UD, SET, Key1	: in std_logic;
       Cin : in std_logic_vector(3 downto 0);
       Cout : out std_logic_vector(3 downto 0);
       CB : out std_logic
@@ -198,16 +220,20 @@ end UpDownCounter;
 
 architecture RTL of UpDownCounter is
 signal c : std_logic_vector(3 downto 0);
+signal enable : std_logic := '1';
 begin
 -- Up/Down Counter with Carry/Borrow and Enable
-	process(CLK, RESET)
+	process(CLK, RESET, Key1)
 	begin
+		if (Key1'event and Key1 = '1') then
+			enable <= not enable;
+		end if;
 		if (RESET = '0') then
 			c <= "0000";
 		elsif (CLK'event and CLK = '1') then
 			if (SET = '1') then
 				c <= Cin;
-			elsif (EN = '1') then
+			elsif (EN = '1' and enable = '1') then
 				if (UD = '0') then  -- Up
 					if (c = "1001") then
 						c <= "0000";
