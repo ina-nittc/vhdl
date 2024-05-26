@@ -75,6 +75,14 @@ component ClkGen is
 	);
 end component;
 
+component Chattering is
+    port (
+        clk : in std_logic;
+        sw_in : in std_logic;
+        sw_out : out std_logic
+    );
+end component;
+
 component UpDownCounter is
 	port (
 		clk	: in std_logic;
@@ -82,7 +90,22 @@ component UpDownCounter is
 		EN		: in std_logic;
 		UD		: in std_logic;
 		SET	: in std_logic;
+		chatterdKey1  : in std_logic;
 		Cin	: in std_logic_vector(3 downto 0);
+		Cout	: out std_logic_vector(3 downto 0);
+		CB		: out std_logic
+	);
+end component;
+
+component UpDownCounter6 is
+	port (
+		clk	: in std_logic;
+		reset	: in std_logic;
+		EN		: in std_logic;
+		UD		: in std_logic;
+		SET	: in std_logic;
+		chatterdKey1    : in std_logic;
+        Cin	: in std_logic_vector(3 downto 0);
 		Cout	: out std_logic_vector(3 downto 0);
 		CB		: out std_logic
 	);
@@ -95,7 +118,7 @@ component SegmentDecoder is
 	);
 end component;
 
-signal clk, clk1, clk10, clk100, reset : std_logic;
+signal clk, clk1, clk10, clk100, clk1000, reset : std_logic;
 signal EN, SET, UD, CB : std_logic;  -- Enable, Set, Up/Down, Carry/Borrow
 signal Cin, Cout : std_logic_vector(3 downto 0);  -- Counter In/Out
 signal SD : std_logic_vector(7 downto 0);  -- Decoder
@@ -106,6 +129,8 @@ signal Cin4, Cin5 : std_logic_vector(3 downto 0);
 signal Cout1, Cout2, Cout3, Cout4, Cout5 : std_logic_vector(3 downto 0);
 signal SD1, SD2, SD3, SD4, SD5 : std_logic_vector(7 downto 0);
 signal DLY_RST : std_logic;
+signal Key1 : std_logic;
+signal chatterdKey1 : std_logic;
 
 begin
 
@@ -119,7 +144,7 @@ RD0: Reset_Delay port map (MAX10_CLK1_50, DLY_RST);
 CG1: ClkGen generic map (25000000) port map (MAX10_CLK1_50, reset, clk1);
 CG10: ClkGen generic map (2500000) port map (MAX10_CLK1_50, reset, clk10);	
 CG100: ClkGen generic map (250000) port map (MAX10_CLK1_50, reset, clk100);
-	clk <= clk1;  -- 1s
+clk <= clk100;  -- 10ms
 	
 -- Signal of Up/Down Counter	
 	EN <= '1';  -- Enable=1(Up/Down)
@@ -129,17 +154,39 @@ CG100: ClkGen generic map (250000) port map (MAX10_CLK1_50, reset, clk100);
 	Cin4 <= SW(3 downto 0);  -- Counter In Lower
 	Cin5 <= SW(7 downto 4);  -- Counter In Upper
 	LEDR(9) <= CB;  -- LED Display Carry/Borrow
+	Key1 <= Key(1); -- Start/Stop
 
 -- Enable of Carry/Borrow
-	
+-- Enable of Carry/Borrow
+EN1 <= CB;
+EN2 <= CB and CB1;
+EN3 <= CB and CB1 and CB2;
+EN4 <= CB and CB1 and CB2 and CB3;
+EN5 <= CB and CB1 and CB2 and CB3 and CB4;
+
 -- Up/Down Counter	
-UDC0: UpDownCounter port map (clk, reset, EN, UD, SET, Cin4, Cout, CB);
+UDC0: UpDownCounter port map (clk, reset, EN, UD, SET, chatterdKey1, Cin, Cout, CB);
+UDC1: UpDownCounter port map (clk, reset, EN1, UD, SET, chatterdKey1, Cin, Cout1, CB1);
+UDC2: UpDownCounter port map (clk, reset, EN2, UD, SET, chatterdKey1, Cin4, Cout2, CB2);
+UDC3: UpDownCounter6 port map (clk, reset, EN3, UD, SET, chatterdKey1, Cin5, Cout3, CB3);
+UDC4: UpDownCounter port map (clk, reset, EN4, UD, SET, chatterdKey1, Cin, Cout4, CB4);
+UDC5: UpDownCounter6 port map (clk, reset, EN5, UD, SET, chatterdKey1, Cin, Cout5, CB5);
 
 -- Hex Segment Decoder
 HSD0: SegmentDecoder port map (Cout, SD);
+HSD1: SegmentDecoder port map (Cout1, SD1);
+HSD2: SegmentDecoder port map (Cout2, SD2);
+HSD3: SegmentDecoder port map (Cout3, SD3);
+HSD4: SegmentDecoder port map (Cout4, SD4);
+HSD5: SegmentDecoder port map (Cout5, SD5);
 
 -- Display Segment
 	HEX0 <= SD;
+	HEX1 <= SD1;
+	HEX2 <= SD2;
+	HEX3 <= SD3;
+	HEX4 <= SD4;
+	HEX5 <= SD5;
 
 end RTL;
 
@@ -180,6 +227,45 @@ begin
 	CLKout <= c;
 end RTL;
 
+-- Chattering
+library IEEE;
+use IEEE.std_logic_1164.all;
+use IEEE.std_logic_unsigned.all;
+
+entity Chattering is
+    port (
+        clk : in std_logic;
+        sw_in : in std_logic;
+        sw_out : out std_logic
+    );
+end Chattering;
+
+architecture RTL of Chattering is
+    signal cnt : std_logic_vector(3 downto 0); -- 4bit counter
+    signal swreg : std_logic; -- Switch Latch
+    signal iclk : std_logic; -- 1/16 clock
+begin
+    sw_out <= swreg;
+
+    -- 4bit Counter
+    process(clk)
+    begin
+        if clk'event and clk = '1' then
+            cnt <= cnt + "1";
+        end if;
+    end process;
+
+    iclk <= cnt(3); -- clock for chattering inhibit
+
+    -- switch latch 
+    process(iclk)
+    begin
+        if iclk'event and iclk = '1' then
+            swreg <= sw_in;
+        end if;
+    end process;
+end RTL;
+
 -- UpDownCounter
 
 library IEEE;
@@ -189,7 +275,7 @@ use IEEE.std_logic_unsigned.all;
 entity UpDownCounter is
    port (
       CLK, RESET : in std_logic;
-      EN, UD, SET	: in std_logic;
+      EN, UD, SET, chatterdKey1	: in std_logic;
       Cin : in std_logic_vector(3 downto 0);
       Cout : out std_logic_vector(3 downto 0);
       CB : out std_logic
@@ -198,16 +284,24 @@ end UpDownCounter;
 
 architecture RTL of UpDownCounter is
 signal c : std_logic_vector(3 downto 0);
+signal enable : std_logic := '1';
 begin
 -- Up/Down Counter with Carry/Borrow and Enable
-	process(CLK, RESET)
+	process(CLK, RESET, chatterdKey1)
 	begin
+		if (chatterdKey1'event and chatterdKey1 = '1') then
+			enable <= not enable;
+		end if;
 		if (RESET = '0') then
 			c <= "0000";
 		elsif (CLK'event and CLK = '1') then
 			if (SET = '1') then
-				c <= Cin;
-			elsif (EN = '1') then
+				if (Cin <= "1001") then
+                    c <= Cin;
+                else
+                    c <= "0000";
+                end if;
+			elsif (EN = '1' and enable = '1') then
 				if (UD = '0') then  -- Up
 					if (c = "1001") then
 						c <= "0000";
@@ -221,12 +315,72 @@ begin
 						c <= c - 1;
 					end if;
 				end if;
-			end if;
+            end if;
 		end if;
 	end process;
 	Cout <= c;
 	-- Carry/Borrow
 	CB <= '1' when (UD = '0') and (c = "1001") else  -- Up Carry
+         '1' when (UD = '1') and (c = "0000") else  -- Down Borrow
+         '0';
+end RTL;
+
+-- UpDownCounter6
+
+library IEEE;
+use IEEE.std_logic_1164.all;
+use IEEE.std_logic_unsigned.all;
+
+entity UpDownCounter6 is
+   port (
+      CLK, RESET : in std_logic;
+      EN, UD, SET, chatterdKey1	: in std_logic;
+      Cin : in std_logic_vector(3 downto 0);
+      Cout : out std_logic_vector(3 downto 0);
+      CB : out std_logic
+   );
+end UpDownCounter6;
+
+architecture RTL of UpDownCounter6 is
+signal c : std_logic_vector(3 downto 0);
+signal enable : std_logic := '1';
+begin
+-- Up/Down Counter with Carry/Borrow and Enable
+	process(CLK, RESET, chatterdKey1)
+	begin
+		if (chatterdKey1'event and chatterdKey1 = '1') then
+			enable <= not enable;
+		end if;
+		
+		if (RESET = '0') then
+			c <= "0000";
+		elsif (CLK'event and CLK = '1') then
+			if (SET = '1') then
+				if (Cin <= "0101") then
+                    c <= Cin;
+                else
+                    c <= "0000";
+                end if;
+			elsif (EN = '1' and enable = '1') then
+				if (UD = '0') then  -- Up
+					if (c = "0101") then
+						c <= "0000";
+					else
+						c <= c + 1;
+					end if;
+				else  -- Down
+					if (c = "0000") then
+						c <= "0101";
+					else
+						c <= c - 1;
+					end if;
+				end if;
+            end if;
+		end if;
+	end process;
+	Cout <= c;
+	-- Carry/Borrow
+	CB <= '1' when (UD = '0') and (c = "0101") else  -- Up Carry
          '1' when (UD = '1') and (c = "0000") else  -- Down Borrow
          '0';
 end RTL;
